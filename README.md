@@ -815,8 +815,7 @@ This project uses GitHub Actions to automatically version, release, and publish 
    - `patch` - Bug fixes (1.0.0 → 1.0.1) - **default**
    - `minor` - New features (1.0.0 → 1.1.0)
    - `major` - Breaking changes (1.0.0 → 2.0.0)
-3. Optionally check **Force publish** to overwrite an existing version on npm
-4. Click **Run workflow**
+3. Click **Run workflow**
 
 The workflow will automatically:
 - Run type checking and tests
