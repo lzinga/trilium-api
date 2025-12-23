@@ -807,12 +807,6 @@ pnpm test -- --ui
 
 This project uses GitHub Actions to automatically version, release, and publish to npm.
 
-### Prerequisites
-
-1. **npm Token**: Add an `NPM_TOKEN` secret to your repository:
-   - Go to [npmjs.com](https://www.npmjs.com/) → Access Tokens → Generate New Token (Classic) → Automation
-   - In GitHub: Repository → Settings → Secrets and variables → Actions → New repository secret
-   - Name: `NPM_TOKEN`, Value: your npm token
 
 ### Creating a Release
 
@@ -821,7 +815,8 @@ This project uses GitHub Actions to automatically version, release, and publish 
    - `patch` - Bug fixes (1.0.0 → 1.0.1) - **default**
    - `minor` - New features (1.0.0 → 1.1.0)
    - `major` - Breaking changes (1.0.0 → 2.0.0)
-3. Click **Run workflow**
+3. Optionally check **Force publish** to overwrite an existing version on npm
+4. Click **Run workflow**
 
 The workflow will automatically:
 - Run type checking and tests
