@@ -24,6 +24,7 @@ jobs:
 
     permissions:
       contents: write
+      id-token: write  # Required for npm trusted publishing (OIDC)
 
     steps:
       - name: Checkout repository
@@ -43,7 +44,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'pnpm'
           registry-url: 'https://registry.npmjs.org'
 
@@ -74,9 +75,8 @@ jobs:
         run: pnpm build
 
       - name: Publish to npm
-        run: pnpm publish --access public --no-git-checks ${{ inputs.force && '--force' || '' }}
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public ${{ inputs.force && '--force' || '' }}
+        # Uses OIDC trusted publishing - no NPM_TOKEN needed
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
