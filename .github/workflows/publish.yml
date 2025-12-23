@@ -12,6 +12,11 @@ on:
           - patch
           - minor
           - major
+      force:
+        description: 'Force publish (overwrite existing version)'
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   publish:
@@ -69,7 +74,7 @@ jobs:
         run: pnpm build
 
       - name: Publish to npm
-        run: pnpm publish --access public --no-git-checks
+        run: pnpm publish --access public --no-git-checks ${{ inputs.force && '--force' || '' }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
