@@ -20,7 +20,7 @@ function createMockResponse(body: any, status = 200, contentType = 'application/
 
 describe('createTriliumClient', () => {
   const config = {
-    baseUrl: 'http://localhost:37840',
+    baseUrl: 'http://localhost:8080',
     apiKey: 'test-api-key',
   };
 
@@ -44,7 +44,7 @@ describe('createTriliumClient', () => {
 
     it('should handle trailing slash in baseUrl', () => {
       const clientWithSlash = createTriliumClient({
-        baseUrl: 'http://localhost:37840/',
+        baseUrl: 'http://localhost:8080/',
         apiKey: 'test-api-key',
       });
       expect(clientWithSlash).toBeDefined();
@@ -75,7 +75,7 @@ describe('createTriliumClient', () => {
       
       // Check the Request object
       const request = mockFetch.mock.calls[0]![0] as Request;
-      expect(request.url).toBe('http://localhost:37840/etapi/app-info');
+      expect(request.url).toBe('http://localhost:8080/etapi/app-info');
       expect(request.method).toBe('GET');
     });
   });
@@ -111,7 +111,7 @@ describe('createTriliumClient', () => {
       expect(data).toEqual(mockNote);
       
       const request = mockFetch.mock.calls[0]![0] as Request;
-      expect(request.url).toBe('http://localhost:37840/etapi/notes/test123');
+      expect(request.url).toBe('http://localhost:8080/etapi/notes/test123');
       expect(request.method).toBe('GET');
     });
 
@@ -200,7 +200,7 @@ describe('createTriliumClient', () => {
       expect(data).toEqual(mockCreatedNote);
       
       const request = mockFetch.mock.calls[0]![0] as Request;
-      expect(request.url).toBe('http://localhost:37840/etapi/create-note');
+      expect(request.url).toBe('http://localhost:8080/etapi/create-note');
       expect(request.method).toBe('POST');
     });
   });
@@ -226,7 +226,7 @@ describe('createTriliumClient', () => {
       expect(data?.title).toBe('Updated Title');
       
       const request = mockFetch.mock.calls[0]![0] as Request;
-      expect(request.url).toBe('http://localhost:37840/etapi/notes/test123');
+      expect(request.url).toBe('http://localhost:8080/etapi/notes/test123');
       expect(request.method).toBe('PATCH');
     });
   });
@@ -243,7 +243,7 @@ describe('createTriliumClient', () => {
       expect(error).toBeUndefined();
       
       const request = mockFetch.mock.calls[0]![0] as Request;
-      expect(request.url).toBe('http://localhost:37840/etapi/notes/test123');
+      expect(request.url).toBe('http://localhost:8080/etapi/notes/test123');
       expect(request.method).toBe('DELETE');
     });
   });
@@ -278,7 +278,7 @@ describe('createTriliumClient', () => {
       expect(error).toBeUndefined();
       
       const request = mockFetch.mock.calls[0]![0] as Request;
-      expect(request.url).toBe('http://localhost:37840/etapi/notes/test123/content');
+      expect(request.url).toBe('http://localhost:8080/etapi/notes/test123/content');
       expect(request.method).toBe('PUT');
     });
   });
@@ -472,6 +472,203 @@ describe('createTriliumClient', () => {
 
       expect(data).toBeUndefined();
       expect(error).toBeDefined();
+    });
+  });
+
+  describe('searchAndMap', () => {
+    const mockNotesWithAttributes = {
+      results: [
+        {
+          noteId: 'note1',
+          title: 'Blog Post 1',
+          attributes: [
+            { type: 'label', name: 'slug', value: 'blog-post-1' },
+            { type: 'label', name: 'published', value: 'true' },
+          ],
+        },
+        {
+          noteId: 'note2',
+          title: 'Blog Post 2',
+          attributes: [
+            { type: 'label', name: 'slug', value: 'blog-post-2' },
+            { type: 'label', name: 'published', value: 'false' },
+          ],
+        },
+      ],
+    };
+
+    interface BlogPost {
+      title: string;
+      slug: string;
+      published: boolean;
+    }
+
+    const blogMapping = {
+      title: 'note.title',
+      slug: '#slug',
+      published: { from: '#published', transform: (v: string) => v === 'true', default: false },
+    };
+
+    it('should search and map notes to typed objects', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse(mockNotesWithAttributes));
+
+      const client = createTriliumClient(config);
+      const { data, failures } = await client.searchAndMap<BlogPost>({
+        query: '#blog',
+        mapping: blogMapping,
+      });
+
+      expect(failures).toHaveLength(0);
+      expect(data).toHaveLength(2);
+      expect(data[0]).toEqual({
+        title: 'Blog Post 1',
+        slug: 'blog-post-1',
+        published: true,
+      });
+      expect(data[1]).toEqual({
+        title: 'Blog Post 2',
+        slug: 'blog-post-2',
+        published: false,
+      });
+    });
+
+    it('should support structured query object', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse(mockNotesWithAttributes));
+
+      const client = createTriliumClient(config);
+      await client.searchAndMap<BlogPost>({
+        query: { '#blog': true, '#published': 'true' },
+        mapping: blogMapping,
+      });
+
+      const request = mockFetch.mock.calls[0]![0] as Request;
+      expect(request.url).toContain('search=');
+      const url = decodeURIComponent(request.url);
+      expect(url).toContain('#blog');
+      expect(url).toContain('#published');
+    });
+
+    it('should include search options in query', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse({ results: [] }));
+
+      const client = createTriliumClient(config);
+      await client.searchAndMap<BlogPost>({
+        query: '#blog',
+        mapping: blogMapping,
+        limit: 10,
+        orderBy: 'dateModified',
+        orderDirection: 'desc',
+        fastSearch: true,
+      });
+
+      const request = mockFetch.mock.calls[0]![0] as Request;
+      const url = decodeURIComponent(request.url);
+      expect(url).toContain('limit:10');
+      expect(url).toContain('orderBy:dateModified');
+      expect(url).toContain('desc');
+      expect(url).toContain('fastSearch');
+    });
+
+    it('should track mapping failures', async () => {
+      const notesWithMissingData = {
+        results: [
+          {
+            noteId: 'note1',
+            title: 'Good Note',
+            attributes: [{ type: 'label', name: 'slug', value: 'good-slug' }],
+          },
+          {
+            noteId: 'note2',
+            title: 'Bad Note',
+            attributes: [], // Missing slug attribute
+          },
+        ],
+      };
+
+      mockFetch.mockResolvedValueOnce(createMockResponse(notesWithMissingData));
+
+      const client = createTriliumClient(config);
+      
+      // Use a mapping that will cause issues with missing data
+      const strictMapping = {
+        title: 'note.title' as const,
+        slug: { 
+          from: '#slug' as const, 
+          transform: (v: string | undefined) => {
+            if (!v) throw new Error('slug is required');
+            return v;
+          }
+        },
+      };
+
+      const { data, failures } = await client.searchAndMap<{ title: string; slug: string }>({
+        query: '#blog',
+        mapping: strictMapping,
+      });
+
+      expect(data).toHaveLength(1);
+      expect(data[0]!.title).toBe('Good Note');
+      
+      expect(failures).toHaveLength(1);
+      expect(failures[0]!.noteId).toBe('note2');
+      expect(failures[0]!.noteTitle).toBe('Bad Note');
+      expect(failures[0]!.reason).toContain('slug is required');
+      expect(failures[0]!.note).toBeDefined();
+    });
+
+    it('should throw on API error', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse({ message: 'Server error' }, 500));
+
+      const client = createTriliumClient(config);
+
+      await expect(
+        client.searchAndMap<BlogPost>({
+          query: '#blog',
+          mapping: blogMapping,
+        })
+      ).rejects.toBeDefined();
+    });
+
+    it('should throw when no results property returned', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse({}));
+
+      const client = createTriliumClient(config);
+
+      await expect(
+        client.searchAndMap<BlogPost>({
+          query: '#blog',
+          mapping: blogMapping,
+        })
+      ).rejects.toThrow('No results returned from search');
+    });
+
+    it('should return empty data array when search returns no results', async () => {
+      mockFetch.mockResolvedValueOnce(createMockResponse({ results: [] }));
+
+      const client = createTriliumClient(config);
+      const { data, failures } = await client.searchAndMap<BlogPost>({
+        query: '#nonexistent',
+        mapping: blogMapping,
+      });
+
+      expect(data).toHaveLength(0);
+      expect(failures).toHaveLength(0);
+    });
+
+    it('should accept TriliumMapper instance', async () => {
+      const { TriliumMapper } = await import('./mapper.js');
+      const mapper = new TriliumMapper<BlogPost>(blogMapping);
+
+      mockFetch.mockResolvedValueOnce(createMockResponse(mockNotesWithAttributes));
+
+      const client = createTriliumClient(config);
+      const { data } = await client.searchAndMap<BlogPost>({
+        query: '#blog',
+        mapping: mapper,
+      });
+
+      expect(data).toHaveLength(2);
+      expect(data[0]!.title).toBe('Blog Post 1');
     });
   });
 });

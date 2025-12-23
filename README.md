@@ -10,6 +10,7 @@ A type-safe TypeScript client for the [Trilium Notes](https://github.com/Trilium
 - [API Reference](#api-reference)
 - [Search Query Builder](#search-query-builder)
 - [Note Mapper](#note-mapper)
+- [Search and Map](#search-and-map)
 - [Types](#types)
 - [Error Handling](#error-handling)
 - [Demo](#demo)
@@ -38,7 +39,7 @@ pnpm add trilium-api
 import { createTriliumClient } from 'trilium-api';
 
 const client = createTriliumClient({
-  baseUrl: 'http://localhost:37840',
+  baseUrl: 'http://localhost:8080',
   apiKey: 'your-etapi-token',
 });
 
@@ -65,7 +66,7 @@ const { data: results } = await client.GET('/notes', {
 import { createTriliumClient } from 'trilium-api';
 
 const client = createTriliumClient({
-  baseUrl: 'http://localhost:37840', // Your Trilium server URL
+  baseUrl: 'http://localhost:8080', // Your Trilium server URL
   apiKey: 'your-etapi-token',        // ETAPI token from Trilium settings
 });
 ```
@@ -392,6 +393,109 @@ const merged = TriliumMapper.merge<BlogPost>(baseMapping, blogMapping);
 const mapper = new TriliumMapper<BlogPost>(merged);
 ```
 
+## Search and Map
+
+The `searchAndMap` method combines searching and mapping in a single call, with built-in error tracking for notes that fail to map:
+
+```typescript
+import { createTriliumClient, transforms } from 'trilium-api';
+
+const client = createTriliumClient({
+  baseUrl: 'http://localhost:8080',
+  apiKey: 'your-etapi-token',
+});
+
+interface BlogPost {
+  title: string;
+  slug: string;
+  published: boolean;
+}
+
+// Search and map in one call
+const { data, failures } = await client.searchAndMap<BlogPost>({
+  query: { '#blog': true, '#published': true },
+  mapping: {
+    title: 'note.title',
+    slug: '#slug',
+    published: { from: '#published', transform: (v) => v === 'true', default: false },
+  },
+  limit: 10,
+  orderBy: 'dateModified',
+  orderDirection: 'desc',
+});
+
+console.log(`Found ${data.length} posts`);
+
+// Check for mapping failures
+if (failures.length > 0) {
+  console.warn(`${failures.length} notes failed to map:`);
+  failures.forEach(f => console.warn(`  - ${f.noteTitle}: ${f.reason}`));
+}
+```
+
+### Options
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `query` | `string \| object` | Search query string or structured query object |
+| `mapping` | `MappingConfig<T>` | Field mapping configuration |
+| `limit` | `number` | Maximum number of results |
+| `orderBy` | `string` | Field to order by (e.g., `'dateModified'`, `'title'`) |
+| `orderDirection` | `'asc' \| 'desc'` | Sort direction |
+| `fastSearch` | `boolean` | Enable fast search mode (less accurate but faster) |
+
+### Return Value
+
+```typescript
+{
+  data: T[],              // Successfully mapped objects
+  failures: MappingFailure[]  // Notes that failed to map
+}
+```
+
+### Handling Failures
+
+When a note fails to map (e.g., missing required field, transform error), it's added to the `failures` array instead of throwing:
+
+```typescript
+interface MappingFailure {
+  noteId: string;    // The note ID that failed
+  noteTitle: string; // The note title for identification
+  reason: string;    // Error message explaining the failure
+  note: TriliumNote; // The original note object for debugging
+}
+```
+
+This allows you to process partial results while still knowing which notes had issues:
+
+```typescript
+const { data, failures } = await client.searchAndMap<BlogPost>({
+  query: '#blog',
+  mapping: {
+    title: 'note.title',
+    slug: { from: '#slug', required: true }, // Will fail if missing
+  },
+});
+
+// data contains all successfully mapped posts
+// failures contains notes missing the required #slug label
+```
+
+### Error Handling
+
+API or network errors throw an exception:
+
+```typescript
+try {
+  const { data, failures } = await client.searchAndMap<BlogPost>({
+    query: '#blog',
+    mapping: blogMapping,
+  });
+} catch (err) {
+  console.error('Search failed:', err);
+}
+```
+
 ## Types
 
 The package exports all types from the OpenAPI specification:
@@ -620,7 +724,7 @@ function createMockResponse(body: any, status = 200, contentType = 'application/
 
 describe('my new feature', () => {
   const config = {
-    baseUrl: 'http://localhost:37840',
+    baseUrl: 'http://localhost:8080',
     apiKey: 'test-api-key',
   };
 
@@ -647,7 +751,7 @@ describe('my new feature', () => {
 
     // 4. Verify the request (openapi-fetch uses Request objects)
     const request = mockFetch.mock.calls[0]![0] as Request;
-    expect(request.url).toBe('http://localhost:37840/etapi/notes/test123');
+    expect(request.url).toBe('http://localhost:8080/etapi/notes/test123');
     expect(request.method).toBe('GET');
     expect(request.headers.get('Authorization')).toBe('test-api-key');
   });

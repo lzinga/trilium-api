@@ -226,8 +226,9 @@ export function buildSearchQuery(helpers: TriliumSearchHelpers): string {
  * Transform function that converts a raw value into the target type
  * @template T - The target object type
  * @template K - The specific key in the target type
+ * @template V - The input value type (defaults to unknown for flexibility)
  */
-export type TransformFunction<T, K extends keyof T> = (value: unknown, note: TriliumNote) => T[K] | undefined;
+export type TransformFunction<T, K extends keyof T, V = unknown> = (value: V, note: TriliumNote) => T[K] | undefined;
 
 /**
  * Computed function that calculates a value from the partially mapped object
@@ -267,8 +268,8 @@ export type FieldMapping<T, K extends keyof T = keyof T> =
   | {
       /** Source path (string) or extractor function */
       from: string | ((note: TriliumNote) => unknown);
-      /** Optional transform function to convert the raw value */
-      transform?: TransformFunction<T, K>;
+      /** Optional transform function to convert the raw value - accepts any input type */
+      transform?: (value: any, note: TriliumNote) => T[K] | undefined;
       /** Default value if extraction returns undefined */
       default?: T[K];
       /** Whether this field is required (throws if missing) */
