@@ -48,6 +48,9 @@ jobs:
           cache: 'pnpm'
           registry-url: 'https://registry.npmjs.org'
 
+      - name: Update npm to latest
+        run: npm install -g npm@latest
+
       - name: Install dependencies
         run: pnpm install
 
@@ -60,16 +63,25 @@ jobs:
       - name: Bump version
         id: version
         run: |
-          pnpm version ${{ inputs.version }} --no-git-tag-version
+          if [ "${{ inputs.force }}" != "true" ]; then
+            pnpm version ${{ inputs.version }} --no-git-tag-version
+          fi
           VERSION=$(node -p "require('./package.json').version")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Commit and tag
+        if: ${{ inputs.force != true }}
         run: |
           git add package.json
           git commit -m "chore: release v${{ steps.version.outputs.version }}"
-          git tag ${{ inputs.force && '-f' || '' }} "v${{ steps.version.outputs.version }}"
-          git push && git push --tags ${{ inputs.force && '--force' || '' }}
+          git tag "v${{ steps.version.outputs.version }}"
+          git push && git push --tags
+
+      - name: Force update tag
+        if: ${{ inputs.force == true }}
+        run: |
+          git tag -f "v${{ steps.version.outputs.version }}"
+          git push --tags --force
 
       - name: Build
         run: pnpm build
