@@ -1,6 +1,6 @@
 {
   "name": "trilium-api",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A type-safe TypeScript client for the Trilium Notes ETAPI",
   "type": "module",
   "main": "./dist/index.cjs",
