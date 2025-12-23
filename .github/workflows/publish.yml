@@ -68,8 +68,8 @@ jobs:
         run: |
           git add package.json
           git commit -m "chore: release v${{ steps.version.outputs.version }}"
-          git tag "v${{ steps.version.outputs.version }}"
-          git push && git push --tags
+          git tag ${{ inputs.force && '-f' || '' }} "v${{ steps.version.outputs.version }}"
+          git push && git push --tags ${{ inputs.force && '--force' || '' }}
 
       - name: Build
         run: pnpm build
