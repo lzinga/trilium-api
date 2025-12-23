@@ -1,6 +1,6 @@
 # trilium-api
 
-A type-safe TypeScript client for the [Trilium Notes](https://github.com/TriliumNext/Notes) ETAPI.
+A type-safe TypeScript client for the [Trilium Notes](https://github.com/TriliumNext/Trilium) ETAPI.
 
 ## Table of Contents
 
