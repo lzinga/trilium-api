@@ -6,6 +6,9 @@
   "main": "index.js",
   "scripts": {
     "build": "tsup src/index.ts --format cjs,esm --dts",
+    "demo": "tsx src/demo.ts",
+    "demo:search": "tsx src/demo-search.ts",
+    "demo:mapper": "tsx src/demo-mapper.ts",
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",

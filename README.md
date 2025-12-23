@@ -2,6 +2,21 @@
 
 A type-safe TypeScript client for the [Trilium Notes](https://github.com/TriliumNext/Notes) ETAPI.
 
+## Table of Contents
+
+- [Features](#features)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [API Reference](#api-reference)
+- [Search Query Builder](#search-query-builder)
+- [Note Mapper](#note-mapper)
+- [Types](#types)
+- [Error Handling](#error-handling)
+- [Demo](#demo)
+- [Development](#development)
+- [Releasing](#releasing)
+- [License](#license)
+
 ## Features
 
 -  **Fully typed** - Auto-generated types from OpenAPI specification
@@ -410,6 +425,79 @@ if (error) {
   // data is typed based on the endpoint
   console.log('Note:', data.title);
 }
+```
+
+## Demo
+
+Several demo scripts are included to help you understand the library's features.
+
+### Note Tree Demo
+
+Connects to a local Trilium instance and displays a tree view of your notes.
+
+```bash
+# Set your ETAPI token and run
+TRILIUM_API_KEY=your-token pnpm demo
+
+# On Windows PowerShell
+$env:TRILIUM_API_KEY="your-token"; pnpm demo
+```
+
+**Configuration:**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TRILIUM_URL` | `http://localhost:8080` | Trilium server URL |
+| `TRILIUM_API_KEY` | - | Your ETAPI token (required) |
+| `MAX_DEPTH` | `3` | Maximum depth of the note tree |
+
+**Getting Your ETAPI Token:**
+
+1. Open Trilium Notes
+2. Go to **Menu** > **Options** > **ETAPI**
+3. Click **Create new ETAPI token**
+4. Copy the generated token
+
+### Search Query Builder Demo
+
+Demonstrates how to build type-safe search queries (no Trilium connection required).
+
+```bash
+pnpm demo:search
+```
+
+Example output:
+```
+1. Simple label search:
+   Code: buildSearchQuery({ "#blog": true })
+   Result: #blog
+
+2. Label with value:
+   Code: buildSearchQuery({ "#status": "published" })
+   Result: #status = 'published'
+
+3. Complex nested conditions:
+   Result: #blog AND (#status = 'published' OR #status = 'featured') AND #wordCount >= 500
+```
+
+### Note Mapper Demo
+
+Demonstrates how to map Trilium notes to strongly-typed objects (no Trilium connection required).
+
+```bash
+pnpm demo:mapper
+```
+
+Example output:
+```
+Title: Getting Started with TypeScript
+  ID: note1
+  Slug: getting-started-typescript
+  Status: published
+  Word Count: 1500
+  Tags: [typescript, programming, tutorial]
+  Published: 2024-01-20T00:00:00.000Z
+  Read Time: 8 min
 ```
 
 ## Development
