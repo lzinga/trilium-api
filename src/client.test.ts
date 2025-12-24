@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { createTriliumClient } from './client.js';
+import { createTriliumClient, TriliumMapper, transforms, type StandardNote } from './client.js';
 
 // Mock fetch globally - openapi-fetch uses Request objects
 const mockFetch = vi.fn();
@@ -481,6 +481,8 @@ describe('createTriliumClient', () => {
         {
           noteId: 'note1',
           title: 'Blog Post 1',
+          utcDateCreated: '2024-01-01T00:00:00.000Z',
+          utcDateModified: '2024-01-02T00:00:00.000Z',
           attributes: [
             { type: 'label', name: 'slug', value: 'blog-post-1' },
             { type: 'label', name: 'published', value: 'true' },
@@ -489,6 +491,8 @@ describe('createTriliumClient', () => {
         {
           noteId: 'note2',
           title: 'Blog Post 2',
+          utcDateCreated: '2024-01-01T00:00:00.000Z',
+          utcDateModified: '2024-01-02T00:00:00.000Z',
           attributes: [
             { type: 'label', name: 'slug', value: 'blog-post-2' },
             { type: 'label', name: 'published', value: 'false' },
@@ -497,14 +501,13 @@ describe('createTriliumClient', () => {
       ],
     };
 
-    interface BlogPost {
-      title: string;
+    interface BlogPost extends StandardNote {
       slug: string;
       published: boolean;
     }
 
+    // Just define custom fields - StandardNoteMapping is auto-merged!
     const blogMapping = {
-      title: 'note.title',
       slug: '#slug',
       published: { from: '#published', transform: (v: string) => v === 'true', default: false },
     };
@@ -520,12 +523,14 @@ describe('createTriliumClient', () => {
 
       expect(failures).toHaveLength(0);
       expect(data).toHaveLength(2);
-      expect(data[0]).toEqual({
+      expect(data[0]).toMatchObject({
+        id: 'note1',
         title: 'Blog Post 1',
         slug: 'blog-post-1',
         published: true,
       });
-      expect(data[1]).toEqual({
+      expect(data[1]).toMatchObject({
+        id: 'note2',
         title: 'Blog Post 2',
         slug: 'blog-post-2',
         published: false,
@@ -575,11 +580,15 @@ describe('createTriliumClient', () => {
           {
             noteId: 'note1',
             title: 'Good Note',
+            utcDateCreated: '2024-01-01T00:00:00.000Z',
+            utcDateModified: '2024-01-02T00:00:00.000Z',
             attributes: [{ type: 'label', name: 'slug', value: 'good-slug' }],
           },
           {
             noteId: 'note2',
             title: 'Bad Note',
+            utcDateCreated: '2024-01-01T00:00:00.000Z',
+            utcDateModified: '2024-01-02T00:00:00.000Z',
             attributes: [], // Missing slug attribute
           },
         ],
@@ -590,10 +599,13 @@ describe('createTriliumClient', () => {
       const client = createTriliumClient(config);
       
       // Use a mapping that will cause issues with missing data
+      interface StrictPost extends StandardNote {
+        slug: string;
+      }
+
       const strictMapping = {
-        title: 'note.title' as const,
         slug: { 
-          from: '#slug' as const, 
+          from: '#slug', 
           transform: (v: string | undefined) => {
             if (!v) throw new Error('slug is required');
             return v;
@@ -601,7 +613,7 @@ describe('createTriliumClient', () => {
         },
       };
 
-      const { data, failures } = await client.searchAndMap<{ title: string; slug: string }>({
+      const { data, failures } = await client.searchAndMap<StrictPost>({
         query: '#blog',
         mapping: strictMapping,
       });
@@ -653,22 +665,6 @@ describe('createTriliumClient', () => {
 
       expect(data).toHaveLength(0);
       expect(failures).toHaveLength(0);
-    });
-
-    it('should accept TriliumMapper instance', async () => {
-      const { TriliumMapper } = await import('./mapper.js');
-      const mapper = new TriliumMapper<BlogPost>(blogMapping);
-
-      mockFetch.mockResolvedValueOnce(createMockResponse(mockNotesWithAttributes));
-
-      const client = createTriliumClient(config);
-      const { data } = await client.searchAndMap<BlogPost>({
-        query: '#blog',
-        mapping: mapper,
-      });
-
-      expect(data).toHaveLength(2);
-      expect(data[0]!.title).toBe('Blog Post 1');
     });
   });
 });

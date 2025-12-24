@@ -321,7 +321,7 @@ export type MappingConfig<T> = {
  */
 export class TriliumMapper<T> {
   /** The mapping configuration for this mapper */
-  private readonly config: MappingConfig<T>;
+  readonly config: MappingConfig<T>;
 
   /**
    * Creates a new TriliumMapper instance
@@ -533,3 +533,99 @@ export const transforms = {
     return String(value).trim() || undefined;
   },
 };
+
+// ============================================================================
+// Standard Note Type and Mapping
+// ============================================================================
+
+/**
+ * Standard note fields that all mapped types must include.
+ * Extend this interface when creating your own mapped types.
+ * 
+ * @example
+ * ```ts
+ * interface BlogPost extends StandardNote {
+ *   slug: string;
+ *   published: boolean;
+ * }
+ * ```
+ */
+export interface StandardNote {
+  /** The unique note ID */
+  id: string;
+  /** The note title */
+  title: string;
+  /** UTC date when the note was created */
+  dateCreatedUtc: Date;
+  /** UTC date when the note was last modified */
+  dateLastModifiedUtc: Date;
+}
+
+/**
+ * Standard mapping configuration for StandardNote fields.
+ * Use with TriliumMapper.merge() to create mappings for types extending StandardNote.
+ * 
+ * @example
+ * ```ts
+ * interface BlogPost extends StandardNote {
+ *   slug: string;
+ *   published: boolean;
+ * }
+ * 
+ * const blogMapping = TriliumMapper.merge<BlogPost>(
+ *   StandardNoteMapping,
+ *   {
+ *     slug: '#slug',
+ *     published: { from: '#published', transform: transforms.boolean, default: false },
+ *   }
+ * );
+ * ```
+ */
+export const StandardNoteMapping: MappingConfig<StandardNote> = {
+  id: {
+    from: 'note.noteId',
+    required: true,
+  },
+  title: {
+    from: 'note.title',
+    required: true,
+  },
+  dateCreatedUtc: {
+    from: 'note.utcDateCreated',
+    transform: transforms.date,
+    required: true,
+  },
+  dateLastModifiedUtc: {
+    from: 'note.utcDateModified',
+    transform: transforms.date,
+    required: true,
+  },
+};
+
+/**
+ * Helper type for defining custom field mappings.
+ * Use this when defining mappings for types that extend StandardNote.
+ * It automatically excludes StandardNote fields since they're auto-merged.
+ * 
+ * @template T - Your custom type that extends StandardNote
+ * 
+ * @example
+ * ```ts
+ * interface BlogPost extends StandardNote {
+ *   slug: string;
+ *   published: boolean;
+ * }
+ * 
+ * // Clean type - no need for verbose Omit<>
+ * const blogMapping: CustomMapping<BlogPost> = {
+ *   slug: '#slug',
+ *   published: { from: '#published', transform: transforms.boolean, default: false },
+ * };
+ * 
+ * const { data } = await client.searchAndMap<BlogPost>({
+ *   query: '#blog',
+ *   mapping: blogMapping,
+ * });
+ * ```
+ */
+export type CustomMapping<T extends StandardNote> = MappingConfig<Omit<T, keyof StandardNote>>;

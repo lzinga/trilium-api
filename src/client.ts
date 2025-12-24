@@ -7,7 +7,7 @@
 
 import createClient, { type Client } from 'openapi-fetch';
 import type { paths, components } from './generated/trilium.js';
-import { TriliumMapper, buildSearchQuery, type MappingConfig, type TriliumSearchHelpers } from './mapper.js';
+import { TriliumMapper, buildSearchQuery, StandardNoteMapping, type MappingConfig, type TriliumSearchHelpers, type StandardNote, type CustomMapping } from './mapper.js';
 
 // Re-export common types for convenience
 export type TriliumNote = components['schemas']['Note'];
@@ -24,16 +24,11 @@ export {
   TriliumMapper,
   buildSearchQuery,
   transforms,
+  StandardNoteMapping,
+  type StandardNote,
+  type CustomMapping,
   type MappingConfig,
-  type FieldMapping,
-  type TransformFunction,
-  type ComputedFunction,
   type TriliumSearchHelpers,
-  type TriliumSearchConditions,
-  type TriliumSearchLogical,
-  type ComparisonOperator,
-  type ConditionValue,
-  type SearchValue,
 } from './mapper.js';
 
 export interface TriliumClientConfig {
@@ -41,11 +36,14 @@ export interface TriliumClientConfig {
   apiKey: string;
 }
 
-export interface SearchAndMapOptions<T> {
+export interface SearchAndMapOptions<T extends StandardNote> {
   /** Search query - either a string or structured search helpers */
   query: string | TriliumSearchHelpers;
-  /** Mapping configuration or TriliumMapper instance to transform notes to type T */
-  mapping: MappingConfig<T> | TriliumMapper<T>;
+  /** 
+   * Mapping configuration for your custom fields only.
+   * StandardNoteMapping (id, title, dates) is automatically merged.
+   */
+  mapping: CustomMapping<T>;
   /** Optional: limit number of results */
   limit?: number;
   /** Optional: order by field (e.g., 'dateModified', 'title') */
@@ -68,7 +66,7 @@ export interface MappingFailure {
   note: TriliumNote;
 }
 
-export interface SearchAndMapResult<T> {
+export interface SearchAndMapResult<T extends StandardNote> {
   /** Mapped results as typed objects */
   data: T[];
   /** Notes that failed to map (e.g., missing required fields) */
@@ -79,23 +77,23 @@ export interface SearchAndMapResult<T> {
 export interface TriliumClient extends Client<paths> {
   /**
    * Search notes and automatically map results to typed objects.
+   * Type T must extend StandardNote to ensure consistent base fields.
+   * StandardNoteMapping is automatically included - just define your custom fields!
    * Throws on API/network errors.
    * 
    * @see {@link https://triliumnext.github.io/Docs/Wiki/search.html} for Trilium search syntax
    * 
    * @example
    * ```ts
-   * interface BlogPost {
-   *   title: string;
+   * interface BlogPost extends StandardNote {
    *   slug: string;
    *   published: boolean;
    * }
    * 
-   * // Basic usage
+   * // Just define your custom fields - StandardNoteMapping is auto-merged!
    * const { data: posts, failures } = await client.searchAndMap<BlogPost>({
    *   query: { '#blog': true, '#published': true },
    *   mapping: {
-   *     title: 'note.title',
    *     slug: '#slug',
    *     published: { from: '#published', transform: transforms.boolean, default: false },
    *   },
@@ -104,12 +102,17 @@ export interface TriliumClient extends Client<paths> {
    *   orderDirection: 'desc',
    * });
    * 
+   * // Each post has id, title, dateCreatedUtc, dateLastModifiedUtc + your custom fields
+   * posts.forEach(post => {
+   *   console.log(`${post.title} (${post.slug}) - ${post.id}`);
+   * });
+   * 
    * if (failures.length > 0) {
    *   console.warn(`${failures.length} notes failed to map`);
    * }
    * ```
    */
-  searchAndMap<T>(options: SearchAndMapOptions<T>): Promise<SearchAndMapResult<T>>;
+  searchAndMap<T extends StandardNote>(options: SearchAndMapOptions<T>): Promise<SearchAndMapResult<T>>;
 }
 
 /**
@@ -168,7 +171,7 @@ export function createTriliumClient(config: TriliumClientConfig): TriliumClient 
   });
 
   // Add searchAndMap helper
-  const searchAndMap = async <T>(options: SearchAndMapOptions<T>): Promise<SearchAndMapResult<T>> => {
+  const searchAndMap = async <T extends StandardNote>(options: SearchAndMapOptions<T>): Promise<SearchAndMapResult<T>> => {
     // Build the search query
     const searchQuery = typeof options.query === 'string' 
       ? options.query 
@@ -204,10 +207,13 @@ export function createTriliumClient(config: TriliumClientConfig): TriliumClient 
       throw new Error('No results returned from search');
     }
 
-    // Support both MappingConfig and TriliumMapper instance
-    const mapper = options.mapping instanceof TriliumMapper
-      ? options.mapping
-      : new TriliumMapper<T>(options.mapping);
+    // Auto-merge with StandardNoteMapping so users only define custom fields
+    const fullMapping = TriliumMapper.merge<T>(
+      StandardNoteMapping as MappingConfig<StandardNote>,
+      options.mapping as MappingConfig<T>
+    );
+    
+    const mapper = new TriliumMapper<T>(fullMapping);
     
     // Map notes individually to track failures
     const mappedData: T[] = [];

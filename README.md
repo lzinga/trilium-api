@@ -24,6 +24,7 @@ A type-safe TypeScript client for the [Trilium Notes](https://github.com/Trilium
 -  **Lightweight** - Built on [openapi-fetch](https://openapi-ts.dev/openapi-fetch/) (~6kb)
 -  **Query Builder** - Type-safe search query construction
 -  **Mapper** - Declarative note-to-object mapping with transforms
+-  **StandardNote** - Consistent base fields (id, title, dates) on all mapped types
 
 ## Installation
 
@@ -262,54 +263,61 @@ const { data } = await client.GET('/notes', {
 
 ## Note Mapper
 
-Map Trilium notes to strongly-typed objects using declarative field mappings:
+Map Trilium notes to strongly-typed objects using declarative field mappings.
+
+### StandardNote Base Type
+
+All mapped types should extend `StandardNote`, which provides consistent base fields:
 
 ```typescript
-import { TriliumMapper, transforms } from 'trilium-api';
+import type { StandardNote } from 'trilium-api';
 
-// Define your target type
-interface BlogPost {
-  id: string;
-  title: string;
+// StandardNote includes:
+// - id: string (note ID)
+// - title: string (note title)  
+// - dateCreatedUtc: Date
+// - dateLastModifiedUtc: Date
+
+interface BlogPost extends StandardNote {
   slug: string;
-  publishDate: Date;
+  tags: string[];
+  isPublished: boolean;
+}
+```
+
+### Using TriliumMapper Directly
+
+For standalone mapping (outside of `searchAndMap`), use `TriliumMapper`:
+
+```typescript
+import { TriliumMapper, StandardNoteMapping, transforms, type StandardNote } from 'trilium-api';
+
+interface BlogPost extends StandardNote {
+  slug: string;
   wordCount: number;
   readTimeMinutes: number;
   tags: string[];
   isPublished: boolean;
 }
 
-// Create a mapper
-const blogMapper = new TriliumMapper<BlogPost>({
-  // Simple property mapping (shorthand)
-  id: 'note.noteId',
-  title: 'note.title',
-  
-  // Label attribute with required validation
-  slug: { from: '#slug', required: true },
-  
-  // Transform string to Date
-  publishDate: { from: '#publishDate', transform: transforms.date },
-  
-  // Transform string to number with default
-  wordCount: { from: '#wordCount', transform: transforms.number, default: 0 },
-  
-  // Computed field based on other mapped values
-  readTimeMinutes: {
-    computed: (partial) => Math.ceil((partial.wordCount || 0) / 200),
-  },
-  
-  // Transform comma-separated string to array
-  tags: { from: '#tags', transform: transforms.commaSeparated, default: [] },
-  
-  // Transform to boolean
-  isPublished: { from: '#published', transform: transforms.boolean, default: false },
-});
+// Merge StandardNoteMapping with your custom fields
+const blogMapper = new TriliumMapper<BlogPost>(
+  TriliumMapper.merge(
+    StandardNoteMapping,
+    {
+      slug: { from: '#slug', required: true },
+      wordCount: { from: '#wordCount', transform: transforms.number, default: 0 },
+      readTimeMinutes: {
+        computed: (partial) => Math.ceil((partial.wordCount || 0) / 200),
+      },
+      tags: { from: '#tags', transform: transforms.commaSeparated, default: [] },
+      isPublished: { from: '#published', transform: transforms.boolean, default: false },
+    }
+  )
+);
 
-// Map a single note
+// Map notes
 const post = blogMapper.map(note);
-
-// Map an array of notes
 const posts = blogMapper.map(notes);
 ```
 
@@ -370,61 +378,43 @@ const posts = blogMapper.map(notes);
 | `transforms.date` | Parse date string | `"2024-01-15"` → `Date` |
 | `transforms.trim` | Trim whitespace | `"  hello  "` → `"hello"` |
 
-### Merging Configurations
-
-Reuse and extend mapping configurations:
-
-```typescript
-// Base configuration for common fields
-const baseMapping = {
-  id: 'note.noteId',
-  title: 'note.title',
-  createdAt: { from: 'note.utcDateCreated', transform: transforms.date },
-};
-
-// Extended configuration for blog posts
-const blogMapping = {
-  slug: '#slug',
-  tags: { from: '#tags', transform: transforms.commaSeparated, default: [] },
-};
-
-// Merge configurations
-const merged = TriliumMapper.merge<BlogPost>(baseMapping, blogMapping);
-const mapper = new TriliumMapper<BlogPost>(merged);
-```
-
 ## Search and Map
 
-The `searchAndMap` method combines searching and mapping in a single call, with built-in error tracking for notes that fail to map:
+The `searchAndMap` method combines searching and mapping in a single call. It **automatically includes `StandardNoteMapping`**, so you only need to define your custom fields!
 
 ```typescript
-import { createTriliumClient, transforms } from 'trilium-api';
+import { createTriliumClient, transforms, type StandardNote, type CustomMapping } from 'trilium-api';
 
 const client = createTriliumClient({
   baseUrl: 'http://localhost:8080',
   apiKey: 'your-etapi-token',
 });
 
-interface BlogPost {
-  title: string;
+// Extend StandardNote with your custom fields
+interface BlogPost extends StandardNote {
   slug: string;
   published: boolean;
 }
 
-// Search and map in one call
+// Use CustomMapping<T> for clean typing - excludes StandardNote fields automatically
+const blogMapping: CustomMapping<BlogPost> = {
+  slug: '#slug',
+  published: { from: '#published', transform: transforms.boolean, default: false },
+};
+
+// Just pass your custom mapping - StandardNoteMapping is auto-merged!
 const { data, failures } = await client.searchAndMap<BlogPost>({
   query: { '#blog': true, '#published': true },
-  mapping: {
-    title: 'note.title',
-    slug: '#slug',
-    published: { from: '#published', transform: (v) => v === 'true', default: false },
-  },
+  mapping: blogMapping,
   limit: 10,
   orderBy: 'dateModified',
   orderDirection: 'desc',
 });
 
-console.log(`Found ${data.length} posts`);
+// Each post has: id, title, dateCreatedUtc, dateLastModifiedUtc, slug, published
+data.forEach(post => {
+  console.log(`${post.title} (${post.id}) - ${post.slug}`);
+});
 
 // Check for mapping failures
 if (failures.length > 0) {
@@ -438,7 +428,7 @@ if (failures.length > 0) {
 | Option | Type | Description |
 |--------|------|-------------|
 | `query` | `string \| object` | Search query string or structured query object |
-| `mapping` | `MappingConfig<T>` | Field mapping configuration |
+| `mapping` | `CustomMapping<T>` | Field mapping for your custom fields (StandardNote fields auto-merged) |
 | `limit` | `number` | Maximum number of results |
 | `orderBy` | `string` | Field to order by (e.g., `'dateModified'`, `'title'`) |
 | `orderDirection` | `'asc' \| 'desc'` | Sort direction |
@@ -469,10 +459,13 @@ interface MappingFailure {
 This allows you to process partial results while still knowing which notes had issues:
 
 ```typescript
+interface BlogPost extends StandardNote {
+  slug: string;
+}
+
 const { data, failures } = await client.searchAndMap<BlogPost>({
   query: '#blog',
   mapping: {
-    title: 'note.title',
     slug: { from: '#slug', required: true }, // Will fail if missing
   },
 });
@@ -498,19 +491,36 @@ try {
 
 ## Types
 
-The package exports all types from the OpenAPI specification:
+The package exports a focused set of types for common use cases:
 
 ```typescript
-import type {
+// Main imports for typical usage
+import { 
+  createTriliumClient, 
+  transforms, 
+  buildSearchQuery,
+} from 'trilium-api';
+
+import type { 
+  // Your mapped types should extend this
+  StandardNote,
+  // For typing your custom field mappings
+  CustomMapping,
+  // For typing query objects
+  TriliumSearchHelpers,
+  // For error handling
+  MappingFailure,
+  // Trilium entity types (for API responses)
   TriliumNote,
   TriliumBranch,
   TriliumAttribute,
   TriliumAttachment,
   TriliumAppInfo,
-  paths,
-  components,
-  operations,
 } from 'trilium-api';
+
+// Advanced: for standalone TriliumMapper usage (outside searchAndMap)
+import { TriliumMapper, StandardNoteMapping } from 'trilium-api';
+import type { MappingConfig } from 'trilium-api';
 ```
 
 ## Error Handling
